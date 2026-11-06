@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prime Factorization Tree</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --card: #ffffff; --ink: #1c2333; --muted: #5b6477;
+    --line: #9aa4b8; --accent: #3355d6; --accent-ink: #ffffff;
+    --node: #eef1fb; --node-border: #b9c3e6;
+    --prime: #f08c00; --prime-bg: #fff3d6;
+    --good: #1f7a37; --good-bg: #e4f5e9; --bad: #b42323; --bad-bg: #fdeaea; --info-bg: #dfe7ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151d; --card: #1b2030; --ink: #e8ecf6; --muted: #9aa5bd;
+      --line: #55607a; --accent: #7b96ff; --accent-ink: #0d1226;
+      --node: #252c42; --node-border: #3b4768;
+      --prime: #ffb43b; --prime-bg: #3a2e12;
+      --good: #6fd68b; --good-bg: #1b3326; --bad: #ff8c8c; --bad-bg: #3a1c1c; --info-bg: #2a3558;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 12px; }
+  .card { background: var(--card); border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .goal { font-size: 1.1rem; }
+  .goal b { font-size: 1.5rem; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+  button { font: inherit; cursor: pointer; }
+  .btn { border: 2px solid var(--accent); background: transparent; color: var(--accent); border-radius: 10px; padding: 6px 12px; font-weight: 600; font-size: .95rem; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.sm { padding: 4px 10px; font-size: .85rem; }
+  :focus-visible { outline: 3px solid var(--prime); outline-offset: 2px; }
+
+  #hint { margin: 10px 0 0; min-height: 1.5em; color: var(--muted); font-size: .95rem; }
+  #hint.good { color: var(--good); font-weight: 600; }
+
+  /* tree */
+  #treeWrap { position: relative; overflow-x: auto; padding: 14px 4px 10px; }
+  #lines { position: absolute; left: 0; top: 0; pointer-events: none; }
+  #tree { display: flex; justify-content: center; min-width: min-content; position: relative; }
+  .branch { display: flex; flex-direction: column; align-items: center; }
+  .children { display: flex; gap: 16px; margin-top: 38px; align-items: flex-start; }
+  .num, .numinput {
+    width: 64px; height: 64px; border-radius: 50%; position: relative; z-index: 1;
+    border: 2px solid var(--node-border); background: var(--node); color: var(--ink);
+    font-size: 1.3rem; font-weight: 700; text-align: center; padding: 0;
+  }
+  .num { min-width: 64px; width: auto; padding: 0 12px; }
+  .num.clickable:hover { border-color: var(--accent); }
+  .num.selected { border-color: var(--accent); box-shadow: 0 0 0 5px var(--info-bg); }
+  .num.done { cursor: default; background: transparent; border-color: var(--line); color: var(--muted); }
+  .num.prime { border: 4px solid var(--prime); background: var(--prime-bg); cursor: default; }
+  .num.pulse { animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--info-bg); } }
+  @media (prefers-reduced-motion: reduce) { .num.pulse { animation: none; } }
+  .numinput { border-style: dashed; border-color: var(--accent); background: var(--card); -moz-appearance: textfield; }
+  .numinput::-webkit-outer-spin-button, .numinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .numinput.shake { animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+  /* popover attached to the selected number (takes no width, so the tree doesn't reflow sideways) */
+  .pop { width: 0; display: flex; justify-content: center; overflow: visible; }
+  .pop > div { flex: none; width: max-content; max-width: 250px; margin-top: 8px; text-align: center; }
+  .pop .row { flex-wrap: nowrap; }
+  .pop > div, .splitact > div { scroll-margin-bottom: 20px; position: relative; z-index: 5; background: var(--card); border-radius: 12px; padding: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  .times { align-self: center; font-size: 1.4rem; font-weight: 700; margin: 0 -8px; }
+  .splitrow { display: flex; align-items: center; gap: 4px; }
+  .splitbox { display: flex; flex-direction: column; align-items: center; }
+  .splitact { width: 0; display: flex; justify-content: center; margin-top: 10px; }
+  .splitact > div { flex: none; width: max-content; max-width: 260px; text-align: center; }
+  .err { margin-top: 8px; padding: 6px 10px; border-radius: 10px; background: var(--bad-bg); color: var(--bad); font-size: .9rem; line-height: 1.3; }
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    main { padding: 12px 8px 32px; }
+    .card { padding: 12px; }
+    .children { gap: 8px; margin-top: 34px; }
+    .num, .numinput { height: 52px; font-size: 1.15rem; }
+    .num { min-width: 52px; padding: 0 8px; }
+    .numinput { width: 52px; }
+    .pop > div, .splitact > div { max-width: 230px; }
+  }
+  .err.info { background: var(--info-bg); color: var(--ink); }
+  .err:empty { display: none; }
+
+  #result { border-top: 2px solid var(--node-border); margin-top: 14px; padding-top: 12px; text-align: center; }
+  #result .big { font-size: 1.7rem; font-weight: 800; margin: 4px 0; }
+  #result .small { color: var(--muted); font-size: .9rem; }
+  sup { font-size: .6em; }
+  .legend { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+  .legend .dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--prime); background: var(--prime-bg); vertical-align: -2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Prime Factorization Tree</h1>
+  <div class="card">
+    <div class="top">
+      <div class="goal">Find the prime factors of <b id="start">?</b></div>
+      <div class="row">
+        <button class="btn sm" id="restart">Start over</button>
+        <button class="btn sm" id="newNum">New number</button>
+      </div>
+    </div>
+    <p id="hint" aria-live="polite"></p>
+    <div id="treeWrap">
+      <svg id="lines" aria-hidden="true"></svg>
+      <div id="tree" role="tree" aria-label="Factor tree"></div>
+    </div>
+    <div class="legend"><span class="dot"></span> = circled prime</div>
+    <div id="result" hidden></div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var MIN = 70, MAX = 200;           // high 2-digit to low 3-digit
+  var root, selectedId, mode, nextId, startValue, errText, errKind, note;
+
+  var $tree = document.getElementById('tree');
+  var $lines = document.getElementById('lines');
+  var $result = document.getElementById('result');
+  var $start = document.getElementById('start');
+  var $hint = document.getElementById('hint');
+
+  function isPrime(n) { if (n < 2) return false; for (var i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; }
+  function smallestFactor(n) { for (var i = 2; i * i <= n; i++) if (n % i === 0) return i; return n; }
+  function primeCount(n) { var c = 0; while (n > 1) { n /= smallestFactor(n); c++; } return c; }
+  function pickNumber() {
+    var n;
+    do { n = MIN + Math.floor(Math.random() * (MAX - MIN + 1)); }
+    while (isPrime(n) || primeCount(n) < 3 || n === startValue);
+    return n;
+  }
+  function newNode(v) { return { id: nextId++, value: v, kids: [], circled: false }; }
+
+  function begin(n) {
+    nextId = 1; startValue = n; root = newNode(n);
+    selectedId = null; mode = 'idle'; errText = ''; note = null;
+    $start.textContent = n;
+    $result.hidden = true;
+    hint('Click the number to begin.');
+    render();
+  }
+  function hint(t, good) { $hint.textContent = t; $hint.className = good ? 'good' : ''; }
+
+  function walk(node, fn) { fn(node); node.kids.forEach(function (k) { walk(k, fn); }); }
+  function find(id) { var hit = null; walk(root, function (n) { if (n.id === id) hit = n; }); return hit; }
+  function openLeaves() { var a = []; walk(root, function (n) { if (!n.kids.length && !n.circled) a.push(n); }); return a; }
+  function primes() { var a = []; walk(root, function (n) { if (n.circled) a.push(n.value); }); return a.sort(function (x, y) { return x - y; }); }
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  /* ---------- rendering ---------- */
+  function branchEl(node) {
+    var b = el('div', 'branch');
+    var btn = el('button', 'num', node.value);
+    btn.setAttribute('role', 'treeitem');
+    var open = !node.kids.length && !node.circled;
+    var selected = node.id === selectedId;
+    if (node.circled) { btn.classList.add('prime'); btn.tabIndex = -1; btn.setAttribute('aria-label', node.value + ', circled prime'); }
+    else if (node.kids.length) { btn.classList.add('done'); btn.tabIndex = -1; btn.setAttribute('aria-label', node.value + ', broken down'); }
+    else {
+      btn.classList.add('clickable');
+      if (selected) btn.classList.add('selected'); else if (selectedId === null) btn.classList.add('pulse');
+      btn.addEventListener('click', function () { choose(node.id); });
+    }
+    b.appendChild(btn);
+
+    if (node.kids.length) {
+      var c = el('div', 'children');
+      node.kids.forEach(function (k) { c.appendChild(branchEl(k)); });
+      b.appendChild(c);
+    } else if (open && selected && mode === 'choose') {
+      b.appendChild(choicePop(node));
+    } else if (open && selected && mode === 'split') {
+      b.appendChild(splitBox(node));
+    }
+    if (note && note.id === node.id) b.appendChild(notePop(note.text));
+    return b;
+  }
+
+  function notePop(text) {
+    var pop = el('div', 'pop'), inner = el('div');
+    inner.appendChild(el('div', 'err info', text));
+    pop.appendChild(inner);
+    return pop;
+  }
+
+  function choicePop(node) {
+    var pop = el('div', 'pop'), inner = el('div'), row = el('div', 'row');
+    var circle = el('button', 'btn sm', 'Circle it');
+    var split = el('button', 'btn sm', 'Break it down');
+    circle.title = 'It’s prime'; split.title = 'It can be split into two factors';
+    circle.addEventListener('click', function () { tryCircle(node); });
+    split.addEventListener('click', function () { mode = 'split'; errText = ''; render(); });
+    var show = el('button', 'btn sm', 'Show me');
+    show.addEventListener('click', function () { doShowMe(node); });
+    row.appendChild(circle); row.appendChild(split);
+    var row2 = el('div', 'row'); row2.style.marginTop = '8px'; row2.appendChild(show);
+    inner.appendChild(row); inner.appendChild(row2); inner.appendChild(errEl());
+    pop.appendChild(inner);
+    return pop;
+  }
+
+  function splitBox(node) {
+    var box = el('div', 'splitbox');
+    var kids = el('div', 'children');
+    var i1 = el('input', 'numinput'), i2 = el('input', 'numinput');
+    [i1, i2].forEach(function (i, n) {
+      i.type = 'number'; i.min = 1; i.inputMode = 'numeric'; i.id = 'f' + (n + 1);
+      i.setAttribute('aria-label', n ? 'Second factor of ' + node.value : 'First factor of ' + node.value);
+      i.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); trySplit(node, i1, i2); } });
+    });
+    var b1 = el('div', 'branch'), b2 = el('div', 'branch');
+    b1.appendChild(i1); b2.appendChild(i2);
+    kids.appendChild(b1); kids.appendChild(b2);
+    box.appendChild(kids);
+
+    var act = el('div', 'splitact'), inner = el('div'), row = el('div', 'row');
+    var check = el('button', 'btn sm', 'Check');
+    var back = el('button', 'btn sm', 'Back');
+    var show = el('button', 'btn sm', 'Show me');
+    check.addEventListener('click', function () { trySplit(node, i1, i2); });
+    back.addEventListener('click', function () { mode = 'choose'; errText = ''; render(); });
+    show.addEventListener('click', function () { doShowMe(node); });
+    row.appendChild(check); row.appendChild(back); row.appendChild(show);
+    inner.appendChild(row); inner.appendChild(errEl());
+    act.appendChild(inner); box.appendChild(act);
+    return box;
+  }
+
+  function render() {
+    $tree.innerHTML = '';
+    $tree.appendChild(branchEl(root));
+    if (!openLeaves().length) showResult(); else $result.hidden = true;
+    var f1 = document.getElementById('f1'); if (f1) f1.focus({ preventScroll: true });
+    layoutTree();
+    revealPop();
+    requestAnimationFrame(layoutTree); // backstop once fonts/layout have settled
+  }
+  // Deep trees can push the buttons below the fold: scroll the page so they are on screen.
+  function revealPop() {
+    var p = $tree.querySelector('.pop > div, .splitact > div');
+    if (p) p.scrollIntoView({ block: 'nearest' });
+  }
+  function layoutTree() { centerSelected(); fitPops(); drawLines(); }
+
+  // On narrow screens the tree scrolls sideways: bring the selected number into view,
+  // then nudge its popover so every button stays inside the visible area.
+  function centerSelected() {
+    var wrap = document.getElementById('treeWrap'), sel = $tree.querySelector('.num.selected');
+    if (!sel || wrap.scrollWidth <= wrap.clientWidth) return;
+    var s = sel.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+    wrap.scrollLeft += (s.left + s.width / 2) - (w.left + w.width / 2);
+  }
+  function fitPops() {
+    var w = document.getElementById('treeWrap').getBoundingClientRect();
+    $tree.querySelectorAll('.pop > div, .splitact > div').forEach(function (p) {
+      p.style.transform = '';
+      var r = p.getBoundingClientRect(), dx = 0;
+      if (r.left < w.left + 4) dx = w.left + 4 - r.left;
+      else if (r.right > w.right - 4) dx = w.right - 4 - r.right;
+      if (dx) p.style.transform = 'translateX(' + dx + 'px)';
+    });
+  }
+
+  function drawLines() {
+    var wrap = document.getElementById('treeWrap');
+    $lines.setAttribute('width', Math.max(wrap.scrollWidth, $tree.scrollWidth));
+    $lines.setAttribute('height', wrap.scrollHeight);
+    $lines.innerHTML = '';
+    var base = wrap.getBoundingClientRect();
+    var color = getComputedStyle(document.documentElement).getPropertyValue('--line');
+    var sx = wrap.scrollLeft, sy = wrap.scrollTop;
+    $tree.querySelectorAll('.branch').forEach(function (b) {
+      var p = b.querySelector(':scope > .num');
+      var kids = b.querySelector(':scope > .children') || b.querySelector(':scope > .splitbox > .children');
+      if (!p || !kids) return;
+      var pr = p.getBoundingClientRect();
+      Array.prototype.forEach.call(kids.children, function (kb) {
+        var c = kb.querySelector(':scope > .num, :scope > .numinput');
+        if (!c) return;
+        var cr = c.getBoundingClientRect();
+        var ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        ln.setAttribute('x1', pr.left + pr.width / 2 - base.left + sx);
+        ln.setAttribute('y1', pr.bottom - base.top + sy);
+        ln.setAttribute('x2', cr.left + cr.width / 2 - base.left + sx);
+        ln.setAttribute('y2', cr.top - base.top + sy);
+        ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', '2');
+        $lines.appendChild(ln);
+      });
+    });
+  }
+
+  function errEl() { return el('div', 'err' + (errKind === 'info' ? ' info' : ''), errText); }
+  function showErr(t, kind) {
+    errText = t; errKind = kind || 'bad';
+    var e = $tree.querySelector('.err');
+    if (e) { e.textContent = t; e.className = 'err' + (errKind === 'info' ? ' info' : ''); }
+    fitPops(); drawLines();
+  }
+
+  /* "We do": reveal the correct move and why, but leave the click to the student */
+  function reasonFor(n, f) {
+    if (f === 2) return n + ' ends in ' + (n % 10) + ', an even digit, so 2 goes into it.';
+    if (f === 3) return 'The digits of ' + n + ' add up to ' + String(n).split('').reduce(function (s, d) { return s + +d; }, 0) + ', which is in the 3 times table, so 3 goes into it.';
+    if (f === 5) return n + ' ends in ' + (n % 10) + ', so 5 goes into it.';
+    return 'Trying small primes, ' + f + ' goes into ' + n + ' evenly.';
+  }
+  // Show me does the step for the student, with the reason right where it happened.
+  function doShowMe(node) {
+    var n = node.value, f = smallestFactor(n);
+    if (isPrime(n)) {
+      node.circled = true;
+      note = { id: node.id, text: n + ' is prime: only 1 \u00d7 ' + n + ' makes it, so we circle it.' };
+    } else {
+      node.kids = [newNode(f), newNode(n / f)];
+      note = { id: node.id, text: reasonFor(n, f) + ' So ' + f + ' \u00d7 ' + (n / f) + ' = ' + n + '.' };
+    }
+    selectedId = null; mode = 'idle'; errText = '';
+    render();
+    if (openLeaves().length) hint('Now click a number to keep going.', true);
+  }
+
+  /* ---------- actions ---------- */
+  function choose(id) { note = null; selectedId = id; mode = 'choose'; errText = ''; hint('Is ' + find(id).value + ' prime, or can it be broken down?'); render(); }
+
+  function tryCircle(node) {
+    if (isPrime(node.value)) {
+      node.circled = true; selectedId = null; mode = 'idle'; errText = ''; note = null;
+      render();
+      if (openLeaves().length) hint('Yes! ' + node.value + ' is prime — its only factors are 1 and itself. Pick the next number.', true);
+    } else {
+      showErr(node.value + ' isn’t prime — it can be divided by ' + smallestFactor(node.value) + '. Try “Break it down.”');
+    }
+  }
+
+  function trySplit(node, i1, i2) {
+    var a = parseInt(i1.value, 10), b = parseInt(i2.value, 10);
+    function bad(t, which) { showErr(t); (which || i1).classList.remove('shake'); void (which || i1).offsetWidth; (which || i1).classList.add('shake'); }
+    if (isNaN(a) || isNaN(b)) return bad('Type a factor in each circle.', isNaN(a) ? i1 : i2);
+    if (a === 1 || b === 1) {
+      return bad(isPrime(node.value)
+        ? node.value + ' is prime, so it can’t be split into two smaller factors. Go back and circle it.'
+        : 'Both factors need to be bigger than 1.');
+    }
+    if (a < 1 || b < 1) return bad('Use positive whole numbers.');
+    if (a * b !== node.value) return bad(a + ' × ' + b + ' = ' + (a * b) + ', not ' + node.value + '. Try again.');
+    node.kids = [newNode(a), newNode(b)];
+    selectedId = null; mode = 'idle'; errText = ''; note = null;
+    render();
+    hint('Nice — ' + a + ' × ' + b + ' = ' + node.value + '. Pick one of the new numbers.', true);
+  }
+
+  function showResult() {
+    var ps = primes(), counts = {}, order = [];
+    ps.forEach(function (p) { if (!counts[p]) { counts[p] = 0; order.push(p); } counts[p]++; });
+    var expo = order.map(function (p) { return counts[p] > 1 ? p + '<sup>' + counts[p] + '</sup>' : '' + p; }).join(' × ');
+    hint('Every branch ends in a circled prime. You did it!', true);
+    $result.hidden = false;
+    $result.innerHTML =
+      '<div>Primes: <b>' + ps.join(' × ') + '</b></div>' +
+      '<div class="big">' + startValue + ' = ' + expo + '</div>' +
+      '<div class="small">Check: ' + ps.join(' × ') + ' = ' + ps.reduce(function (x, y) { return x * y; }, 1) + '</div>' +
+      '<div class="row" style="margin-top:10px"><button class="btn primary" id="again">Try another number</button></div>';
+    document.getElementById('again').addEventListener('click', function () { begin(pickNumber()); });
+  }
+
+  document.getElementById('newNum').addEventListener('click', function () { begin(pickNumber()); });
+  document.getElementById('restart').addEventListener('click', function () { begin(startValue); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && selectedId !== null) { selectedId = null; mode = 'idle'; errText = ''; note = null; hint('Click a glowing number.'); render(); }
+  });
+  window.addEventListener('resize', function () { fitPops(); drawLines(); });
+  document.getElementById('treeWrap').addEventListener('scroll', function () { fitPops(); drawLines(); });
+
+  // optional: ?n=84 in the URL sets the starting number (handy for teachers)
+  var q = parseInt(new URLSearchParams(location.search).get('n'), 10);
+  begin(q >= 4 && q <= 999 && !isPrime(q) ? q : pickNumber());
+})();
+</script>
+</body>
+</html>
